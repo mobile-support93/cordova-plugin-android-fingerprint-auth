@@ -195,7 +195,8 @@ public class FingerprintAuth extends CordovaPlugin {
             return true;
         }
 
-        Log.v(TAG, "FingerprintAuth action: " + action);
+        Log.v(TAG, "FingerprintAuth actionsssss: " + action);
+      Log.v(TAG, "FingerprintAuth mActions: ");
         if (action.equals("availability")) {
             mAction = PluginAction.AVAILABILITY;
         } else if (action.equals("encrypt")) {
@@ -209,6 +210,7 @@ public class FingerprintAuth extends CordovaPlugin {
         }
 
         if (mAction != null) {
+          Log.v(TAG, "FingerprintAuth mAction: " + mAction);
             final JSONObject arg_object = args.getJSONObject(0);
 
             JSONObject resultJson = new JSONObject();
@@ -307,14 +309,34 @@ public class FingerprintAuth extends CordovaPlugin {
                     res.updateConfiguration(conf, dm);
 
                     SecretKey key = getSecretKey();
+                  Log.v(TAG, "FingerprintAuth key: "+ key);
                     if (key == null) {
                         if (createKey()) {
                             key = getSecretKey();
                         }
                     }
 
-                    if (key == null) {
+                    if (key == null) { //new added if
+                      /***
+                       Use backup
+                       */
+                      Log.v(TAG, "In backup");
+                      if (useBackupLockScreen() == true) {
+                        Log.v(TAG, "useBackupLockScreen: true");
+                      } else {
+                        Log.v(TAG, "useBackupLockScreen: false");
+                      }
+
+                      if (useBackupLockScreen()) {
+                        showAuthenticationScreen();
+                      } else {
+                        Log.e(TAG, "Fingerprint authentication not available");
+                        mPluginResult = new PluginResult(PluginResult.Status.ERROR);
+                        mCallbackContext.error(PluginError.FINGERPRINT_NOT_AVAILABLE.name());
                         mCallbackContext.sendPluginResult(mPluginResult);
+                      }
+                      mPluginResult.setKeepCallback(true); //new added
+                        //mCallbackContext.sendPluginResult(mPluginResult); //old code
                     } else {
                         if (isFingerprintAuthAvailable()) {
                             cordova.getActivity().runOnUiThread(new Runnable() {
@@ -518,6 +540,7 @@ public class FingerprintAuth extends CordovaPlugin {
         if (key == null) {
             Log.e(TAG, errorMessage);
         }
+      Log.v(TAG, "FingerprintAuth return key: "+ key);
         return key;
     }
 
@@ -526,6 +549,7 @@ public class FingerprintAuth extends CordovaPlugin {
      * authenticated with fingerprint.
      */
     public static boolean createKey() {
+
         String errorMessage = "";
         String createKeyExceptionErrorPrefix = "Failed to create key: ";
         boolean isKeyCreated = false;
@@ -533,39 +557,42 @@ public class FingerprintAuth extends CordovaPlugin {
         // for your flow. Use of keys is necessary if you need to know if the set of
         // enrolled fingerprints has changed.
         try {
-            mKeyStore.load(null);
-            // Set the alias of the entry in Android KeyStore where the key will appear
-            // and the constrains (purposes) in the constructor of the Builder
-            mKeyGenerator.init(new KeyGenParameterSpec.Builder(mClientId,
-                    KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
-                    .setBlockModes(KeyProperties.BLOCK_MODE_CBC)
-                    .setUserAuthenticationRequired(mUserAuthRequired)
-                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_PKCS7)
-                    .build());
-            mKeyGenerator.generateKey();
-            isKeyCreated = true;
+          mKeyStore.load(null);
+          // Set the alias of the entry in Android KeyStore where the key will appear
+          // and the constrains (purposes) in the constructor of the Builder
+          mKeyGenerator.init(new KeyGenParameterSpec.Builder(mClientId,
+            KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
+            .setBlockModes(KeyProperties.BLOCK_MODE_CBC)
+            .setUserAuthenticationRequired(mUserAuthRequired)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_PKCS7)
+            .build());
+          mKeyGenerator.generateKey();
+          isKeyCreated = true;
         } catch (NoSuchAlgorithmException e) {
-            Log.e(TAG, createKeyExceptionErrorPrefix
-                    + "NoSuchAlgorithmException: " + e.toString());
-            errorMessage = PluginError.NO_SUCH_ALGORITHM_EXCEPTION.name();
-        } catch (InvalidAlgorithmParameterException e) {
-            Log.e(TAG, createKeyExceptionErrorPrefix
-                    + "InvalidAlgorithmParameterException: " + e.toString());
-            errorMessage = PluginError.INVALID_ALGORITHM_PARAMETER_EXCEPTION.name();
-        } catch (CertificateException e) {
-            Log.e(TAG, createKeyExceptionErrorPrefix
-                    + "CertificateException: " + e.toString());
-            errorMessage = PluginError.CERTIFICATE_EXCEPTION.name();
+          Log.e(TAG, createKeyExceptionErrorPrefix
+            + "NoSuchAlgorithmException: " + e.toString());
+          errorMessage = PluginError.NO_SUCH_ALGORITHM_EXCEPTION.name();
+        }
+        catch (InvalidAlgorithmParameterException e) {
+          Log.e(TAG, createKeyExceptionErrorPrefix
+            + "InvalidAlgorithmParameterException: " + e.toString());
+          errorMessage = PluginError.INVALID_ALGORITHM_PARAMETER_EXCEPTION.name();
+        }
+        catch (CertificateException e) {
+          Log.e(TAG, createKeyExceptionErrorPrefix
+            + "CertificateException: " + e.toString());
+          errorMessage = PluginError.CERTIFICATE_EXCEPTION.name();
         } catch (IOException e) {
-            Log.e(TAG, createKeyExceptionErrorPrefix
-                    + "IOException: " + e.toString());
-            errorMessage = PluginError.IO_EXCEPTION.name();
+          Log.e(TAG, createKeyExceptionErrorPrefix
+            + "IOException: " + e.toString());
+          errorMessage = PluginError.IO_EXCEPTION.name();
         }
         if (!isKeyCreated) {
-            Log.e(TAG, errorMessage);
-            setPluginResultError(errorMessage);
+          Log.e(TAG, errorMessage);
+          //setPluginResultError(errorMessage);
         }
         return isKeyCreated;
+
     }
 
     public static void onAuthenticated(boolean withFingerprint,
@@ -616,6 +643,12 @@ public class FingerprintAuth extends CordovaPlugin {
                 }
                 createdResultJson = true;
             }
+
+//          if (!isFingerprintAuthAvailable()) {
+//            mCallbackContext.success(resultJson);
+//            mPluginResult = new PluginResult(PluginResult.Status.OK);
+//          }
+
         } catch (BadPaddingException e) {
             Log.e(TAG, "Failed to encrypt the data with the generated key:"
                     + " BadPaddingException:  " + e.toString());
@@ -642,7 +675,11 @@ public class FingerprintAuth extends CordovaPlugin {
     }
 
     public static void onCancelled() {
-        mCallbackContext.error(PluginError.FINGERPRINT_CANCELLED.name());
+        Log.v(TAG, "Canceled fingerprint");
+      mCallbackContext.error("fingerprint cancelled");
+        //mPluginResult = new PluginResult(PluginResult.Status.OK);
+        //mCallbackContext.sendPluginResult(mPluginResult);
+        //mCallbackContext.error(PluginError.FINGERPRINT_CANCELLED.name()); //old
     }
 
     public static void onError(CharSequence errString) {
@@ -712,18 +749,33 @@ public class FingerprintAuth extends CordovaPlugin {
 
     }
 
+
+
     private void showAuthenticationScreen() {
         Intent intent = mKeyguardManager.createConfirmDeviceCredentialIntent(null, null);
         if (intent != null) {
+          cordova.setActivityResultCallback (this);
           cordova.getActivity().startActivityForResult(intent, REQUEST_CODE_CONFIRM_DEVICE_CREDENTIALS);
         }
     }
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
+
+      Log.v(TAG, "requestCode: " + requestCode);
+      Log.v(TAG, "resultCode: true "+ resultCode);
+
+      //Log.v(TAG, "data: true " + data);
         if (requestCode == REQUEST_CODE_CONFIRM_DEVICE_CREDENTIALS) {
+          Log.v(TAG, "RESULT_OK " +cordova.getActivity().RESULT_OK);
             if (resultCode == cordova.getActivity().RESULT_OK) {
-              onAuthenticated(false, null);
+              if (!isFingerprintAuthAvailable()) { //new if else
+                mCallbackContext.success("successfully authenticated");
+                mPluginResult = new PluginResult(PluginResult.Status.OK);
+              }else{
+                onAuthenticated(false, null);
+              }
+              // onAuthenticated(false, null); //old code
             } else {
               onCancelled();
             }
